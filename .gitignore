@@ -1,0 +1,16 @@
+old/
+outputs/
+
+# Fichiers Python temporaires
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Fichiers système macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
