@@ -1,6 +1,8 @@
 old/
 outputs/
 
+setup_lambda_h100.sh
+
 # Fichiers Python temporaires
 __pycache__/
 *.py[cod]

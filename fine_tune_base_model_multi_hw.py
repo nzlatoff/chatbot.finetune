@@ -9,6 +9,9 @@ import random
 import platform
 from typing import Dict, Any
 
+import re
+from datetime import datetime
+
 from huggingface_hub import login
 from transformers import (
     AutoModelForCausalLM,
@@ -23,6 +26,27 @@ from peft import LoraConfig, get_peft_model
 import torch
 from datasets import load_dataset
 
+# [SAVE-NAME] Build artifact names from model id/path and current date
+def make_artifact_names(base_model_id: str, prefix: str = "mtext"):
+    """
+    Returns (lora_repo_name, merged_repo_name) using:
+      mtext-YYYYMMDD_<base>_lora-adapters
+      mtext-YYYYMMDD_<base>_merged
+    where <base> is the last path segment of the model id, lowercased and sanitized.
+    """
+    base = (base_model_id or "").rstrip("/").split("/")[-1] or "model"
+    # keep letters, numbers, ., _, - ; replace anything else with '-'
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", base).lower()
+    stamp = datetime.now().strftime("%Y%m%d")
+    lora = f"{prefix}-{stamp}_{base}_lora-adapters"
+    merged = f"{prefix}-{stamp}_{base}_merged"
+    return lora, merged
+
+
+# [SAVE-NAME] Only let rank 0 write/push in DDP
+def is_main_process() -> bool:
+    # If you're using HF Trainer, you can alternatively check: trainer.is_world_process_zero()
+    return os.environ.get("RANK", "0") in ("0", None, "")
 
 # [HW-AUTO] NEW: hardware/precision detection + sensible defaults per backend
 def _detect_hardware() -> Dict[str, Any]:
@@ -396,6 +420,40 @@ def main():
     model.push_to_hub("mtext-111025_mistral-7B-v0.3_merged", use_temp_dir=False)
     tokenizer.push_to_hub("mtext-111025_mistral-7B-v0.3_merged", use_temp_dir=False)
     """
+
+    # ===================== Save & Push =====================
+    # [SAVE-NAME] Build names from --model-path (args.model_path) and current date
+    lora_repo, merged_repo = make_artifact_names(args.model_path)
+
+    if is_main_process():
+        # --- Save LoRA adapter locally ---
+        # NOTE: 'model' is still the PEFT-wrapped model here (before merge)
+        # [SAVE-NAME] local save: LoRA adapters
+        model.save_pretrained(lora_repo)
+        tokenizer.save_pretrained(lora_repo)
+
+        # --- Push LoRA adapter to the Hub ---
+        # [SAVE-NAME] hub push: LoRA adapters
+        model.push_to_hub(lora_repo, use_temp_dir=False)
+        tokenizer.push_to_hub(lora_repo, use_temp_dir=False)
+
+    # --- Merge LoRA into base weights for an inference-ready model ---
+    # [SAVE-NAME] merge step
+    model = model.merge_and_unload()
+    model.config.use_cache = True  # re-enable cache for inference
+
+    if is_main_process():
+        # --- Save merged model locally ---
+        # [SAVE-NAME] local save: merged
+        model.save_pretrained(merged_repo)
+        tokenizer.save_pretrained(merged_repo)
+
+        # --- Push merged model to the Hub ---
+        # [SAVE-NAME] hub push: merged
+        model.push_to_hub(merged_repo, use_temp_dir=False)
+        tokenizer.push_to_hub(merged_repo, use_temp_dir=False)
+
+    # =================== End Save & Push ===================
 
 
 if __name__ == "__main__":
