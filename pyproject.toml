@@ -12,7 +12,8 @@ dependencies = [
     "huggingface-hub (==0.34.4)",
     "peft (==0.17.1)",
     "torch (==2.8.0)",
-    "transformers (==4.56.0)"
+    "transformers (==4.56.0)",
+    "numpy (==1.26.4)"
 ]
 
 [tool.poetry]

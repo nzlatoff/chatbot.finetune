@@ -2,6 +2,8 @@ old/
 outputs/
 
 setup_lambda_h100.sh
+setup_lambda_h100_2.sh
+setup_lambda_h100_3.sh
 
 # Fichiers Python temporaires
 __pycache__/
